@@ -1,0 +1,31 @@
+{
+  "name": "pmp-timesheet",
+  "private": true,
+  "version": "2.1.0",
+  "description": "PMP Timesheet — Tauri 2.0 跨平台应用",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "build:win": "npm run build && cd src-tauri && XWIN_ACCEPT_LICENSE=1 cargo xwin build --release --target x86_64-pc-windows-msvc --features tauri/custom-protocol",
+    "tauri": "tauri",
+    "dev:tauri": "tauri dev",
+    "build:mac": "tauri build",
+    "build:mac:arm": "tauri build --target aarch64-apple-darwin",
+    "build:mac:intel": "tauri build --target x86_64-apple-darwin",
+    "build:mac:universal": "tauri build --target universal-apple-darwin"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-shell": "^2.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.8"
+  }
+}
