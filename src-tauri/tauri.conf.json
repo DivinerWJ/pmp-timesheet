@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/tauri/dev/crates/tauri-cli/schema.json",
   "productName": "PMP Timesheet",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "identifier": "com.divinerwj.pmp-timesheet",
   "build": {
     "beforeDevCommand": "npm run dev",

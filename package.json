@@ -1,7 +1,7 @@
 {
   "name": "pmp-timesheet",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "PMP Timesheet — Tauri 2.0 跨平台应用",
   "type": "module",
   "scripts": {

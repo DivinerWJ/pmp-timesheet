@@ -1,6 +1,6 @@
 [package]
 name = "pmp-timesheet"
-version = "2.1.0"
+version = "2.2.0"
 description = "PMP Timesheet — Tauri 2.0 跨平台应用"
 authors = ["DivinerWJ"]
 edition = "2021"
