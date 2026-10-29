@@ -127,10 +127,25 @@ export function usePmpApi() {
     );
   }
 
+  async function savePreferences(params: {
+    rememberTaskDesc?: boolean;
+    rememberTaskId?: boolean;
+  }): Promise<boolean> {
+    return call(() =>
+      invoke<boolean>("save_preferences", {
+        req: {
+          remember_task_desc: params.rememberTaskDesc ?? null,
+          remember_task_id: params.rememberTaskId ?? null,
+        },
+      }),
+    );
+  }
+
   return {
     loadingCount,
     loadingText,
     getConfig,
+    savePreferences,
     login,
     relogin,
     listTasks,

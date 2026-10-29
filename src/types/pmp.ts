@@ -36,11 +36,21 @@ export interface ConfigResponse {
   config_path: string;
   today: string;
   config_error: string | null;
+  /** 还没有可用配置（首次使用 / 配置不完整），应展示引导而不是报错 */
+  needs_setup: boolean;
   logged_in: boolean;
   base_url: string;
   client_id: string;
   client_secret: string;
   default_task_desc: string;
+  /** 是否记住工作描述：提交后保留，下次打开自动填入 */
+  remember_task_desc: boolean;
+  /** 是否记住选中的任务：下次打开自动选中 */
+  remember_task_id: boolean;
+  /** 上次提交使用的工作描述 */
+  last_task_desc: string;
+  /** 上次提交选中的任务 ID */
+  last_task_id: string;
 }
 
 /** 登录响应 */

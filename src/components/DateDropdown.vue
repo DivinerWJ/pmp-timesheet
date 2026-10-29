@@ -10,7 +10,9 @@
         <StatusTag :reason="selectedInfo?.reason ?? '未填'" />
         <span class="date-txt">{{ displayLabel }}</span>
       </span>
-      <span class="chev">▾</span>
+      <svg class="chev" viewBox="0 0 12 8" aria-hidden="true">
+        <path d="M1 1.5l5 5 5-5" />
+      </svg>
     </button>
     <div class="day-dd-panel" role="listbox">
       <button

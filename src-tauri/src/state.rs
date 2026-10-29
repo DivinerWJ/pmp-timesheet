@@ -1,4 +1,4 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ConfigIssue};
 use crate::pmp_api::PmpClient;
 use tokio::sync::Mutex;
 
@@ -6,5 +6,6 @@ use tokio::sync::Mutex;
 pub struct AppState {
     pub config: Mutex<Option<AppConfig>>,
     pub client: Mutex<Option<PmpClient>>,
-    pub config_error: Mutex<Option<String>>,
+    /// 配置缺失/不完整/损坏的原因；None 表示配置可用
+    pub config_issue: Mutex<Option<ConfigIssue>>,
 }

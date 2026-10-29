@@ -1,0 +1,8 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+  <!-- 单色白描版标记：用于蓝色底色上的品牌位，不再需要白色垫板 -->
+  <circle cx="440" cy="440" r="250" fill="none" stroke="#ffffff" stroke-width="58"/>
+  <line x1="440" y1="440" x2="440" y2="290" stroke="#ffffff" stroke-width="58" stroke-linecap="round"/>
+  <line x1="440" y1="440" x2="556" y2="502" stroke="#ffffff" stroke-width="58" stroke-linecap="round"/>
+  <circle cx="440" cy="440" r="38" fill="#ffffff"/>
+  <path d="M618 700 l70 70 l130 -168" fill="none" stroke="#ffffff" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

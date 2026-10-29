@@ -34,13 +34,21 @@ body {
   height: 100vh;
 }
 
+/* 隐藏滚动条：仍可滚动，只是不显示滚动条本身 */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 #app {
   max-width: 480px;
   margin: 0 auto;
-  padding: 0 14px 28px;
   height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--card);
 }
 
 .card {
@@ -224,20 +232,21 @@ button:disabled {
   color: var(--text);
   border: 1px solid var(--line);
   font-weight: 500;
-  padding: 8px 12px;
+  padding: 9px 12px;
   min-height: 42px;
-  border-radius: var(--radius-sm);
-  transition: border-color 0.15s ease;
+  border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .day-dd-trigger:hover {
   border-color: var(--brand);
+  background: #fbfcfe;
 }
 
 .day-dd-trigger .left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
   flex: 1;
 }
@@ -246,18 +255,34 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 .day-dd-trigger .chev {
-  color: var(--muted);
-  font-size: 16px;
+  width: 12px;
+  height: 8px;
   flex-shrink: 0;
-  transition: color 0.15s ease;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.15s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .day-dd-trigger:hover .chev {
-  color: #fff;
+  stroke: var(--brand);
+}
+
+.day-dd.open .day-dd-trigger {
+  border-color: var(--brand);
+}
+
+.day-dd.open .chev {
+  transform: rotate(180deg);
 }
 
 .day-dd-panel {
@@ -387,12 +412,6 @@ button:disabled {
 
 .task:last-child {
   border-bottom: none;
-}
-
-.task input[type="radio"] {
-  width: auto;
-  margin: 4px 0 0;
-  flex-shrink: 0;
 }
 
 .meta {

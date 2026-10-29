@@ -14,12 +14,19 @@
     "build:mac": "tauri build",
     "build:mac:arm": "tauri build --target aarch64-apple-darwin",
     "build:mac:intel": "tauri build --target x86_64-apple-darwin",
-    "build:mac:universal": "tauri build --target universal-apple-darwin"
+    "build:mac:universal": "tauri build --target universal-apple-darwin",
+    "version": "node scripts/sync-version.mjs && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock",
+    "version:sync": "node scripts/sync-version.mjs",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags"
   },
   "dependencies": {
-    "vue": "^3.5.13",
     "@tauri-apps/api": "^2.5.0",
-    "@tauri-apps/plugin-shell": "^2.2.0"
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-shell": "^2.2.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

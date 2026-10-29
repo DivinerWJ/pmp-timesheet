@@ -1,10 +1,16 @@
-name: Build
+name: Build & Release
 
+# 推送 v* 标签：四平台并行构建 → 创建 Release（草稿）→ 汇总生成 latest.json
+# 更新清单里包含 windows-x86_64 / darwin-aarch64 / darwin-x86_64 三个平台的条目，
+# 客户端按自身编译时的 target 取对应那条。
 on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -34,6 +40,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -53,7 +60,22 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 更新包签名私钥（Ed25519）：Settings → Secrets → Actions
+          # 内容为 src-tauri/.updater/pmp-timesheet.key 的完整文本。
+          # 没有它就不会生成 .sig，自动更新无法工作。
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # macOS 代码签名 + 公证（可选但强烈建议）：未签名应用首次安装需右键打开，
+          # 自动更新替换后也可能被 Gatekeeper 拦截。非 mac 平台传空值即可。
+          APPLE_CERTIFICATE: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_TEAM_ID || '' }}
         with:
+          # 不在这里创建 Release：各平台并行上传会互相覆盖 latest.json，
+          # 统一由下面的 manifest job 生成
+          includeUpdaterJson: false
           args: --target ${{ matrix.target }}
 
       - name: Upload artifacts
@@ -67,21 +89,124 @@ jobs:
             src-tauri/target/*/release/bundle/appimage/*.AppImage
             src-tauri/target/*/release/bundle/msi/*.msi
             src-tauri/target/*/release/bundle/nsis/*.exe
+            src-tauri/target/*/release/bundle/nsis/*.sig
+            src-tauri/target/*/release/bundle/macos/*.tar.gz
+            src-tauri/target/*/release/bundle/macos/*.sig
           if-no-files-found: ignore
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**
+          # 直接发布（非草稿）：tag 推上来即对客户端生效
+          # releases/latest/download/latest.json 只解析已发布的 release，草稿会 404
+          draft: false
+          name: PMP 工时 ${{ github.ref_name }}
+          body: 各平台安装包见下方 Assets。应用内「检查更新」会拉取 latest.json 自动升级。
+          files: artifacts/*
+
+  # 汇总更新清单：三个平台的 signature + 下载地址合成一份 latest.json
+  manifest:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验版本号一致
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          PKG=$(node -p "require('./package.json').version")
+          if [ "v$CONF" != "$TAG" ] || [ "$PKG" != "$CONF" ]; then
+            echo "::error::版本号不一致 —— tag=$TAG tauri.conf=$CONF package.json=$PKG，请先统一版本号再打标签"
+            exit 1
+          fi
+
+      - name: 生成 latest.json 并上传
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          tag = os.environ["TAG"]
+          version = tag.lstrip("v")
+          repo = os.environ["GITHUB_REPOSITORY"]
+
+          def gh(*args):
+              return subprocess.check_output(["gh", *args])
+
+          release = json.loads(gh("api", f"repos/{repo}/releases/tags/{tag}"))
+          assets = {a["name"]: a for a in release["assets"]}
+
+          def sig_text(asset_id):
+              # 只取签名文件内容（几百字节），不下载安装包本体
+              raw = gh(
+                  "api",
+                  f"repos/{repo}/releases/assets/{asset_id}",
+                  "-H",
+                  "Accept: application/octet-stream",
+              )
+              return raw.decode("utf-8").strip()
+
+          # 资产名 → 平台 key（客户端按编译时的 target 匹配对应条目）
+          matchers = {
+              "windows-x86_64": lambda n: n.endswith("-setup.exe"),
+              "darwin-aarch64": lambda n: n.endswith("aarch64.app.tar.gz"),
+              "darwin-x86_64": lambda n: n.endswith("x64.app.tar.gz") and "aarch64" not in n,
+          }
+
+          platforms = {}
+          missing = []
+          for key, match in matchers.items():
+              name = next((n for n in assets if match(n)), None)
+              if not name:
+                  missing.append(key)
+                  continue
+              sig = assets.get(name + ".sig")
+              if sig is None:
+                  missing.append(key + " .sig")
+                  continue
+              platforms[key] = {
+                  "signature": sig_text(sig["id"]),
+                  "url": assets[name]["browser_download_url"],
+              }
+
+          if missing:
+              raise SystemExit(
+                  "::error::缺少产物，无法生成完整更新清单: " + ", ".join(missing)
+              )
+
+          manifest = {
+              "version": version,
+              "notes": release.get("body") or f"PMP 工时 v{version}",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime(
+                  "%Y-%m-%dT%H:%M:%SZ"
+              ),
+              "platforms": platforms,
+          }
+          pathlib.Path("latest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          print(json.dumps(manifest, ensure_ascii=False, indent=2))
+          PY
+
+          gh release upload "${GITHUB_REF_NAME}" latest.json --clobber

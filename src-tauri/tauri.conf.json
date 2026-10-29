@@ -20,8 +20,7 @@
         "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "decorations": false
       }
     ],
     "security": {
@@ -31,6 +30,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,5 +45,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/DivinerWJ/pmp-timesheet/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5MEQ1RjAyMThENzk5ClJXU1oxeGdDWHczNUFPc2MvdkRsWG5tOHlJUEhBUVgraXdaVStYTm0zSFdzS0tKZFBwcGMrcHRYCg==",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
