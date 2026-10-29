@@ -1,6 +1,6 @@
 name: Build & Release
 
-# 推送 v* 标签：四平台并行构建 → 创建 Release（草稿）→ 汇总生成 latest.json
+# 推送 v* 标签：四平台并行构建 → tauri-action 创建 Release 并上传产物 → 汇总生成 latest.json
 # 更新清单里包含 windows-x86_64 / darwin-aarch64 / darwin-x86_64 三个平台的条目，
 # 客户端按自身编译时的 target 取对应那条。
 on:
@@ -64,14 +64,14 @@ jobs:
           # 内容为 src-tauri/.updater/pmp-timesheet.key 的完整文本。
           # 没有它就不会生成 .sig，自动更新无法工作。
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          # macOS 代码签名 + 公证（可选但强烈建议）：未签名应用首次安装需右键打开，
-          # 自动更新替换后也可能被 Gatekeeper 拦截。非 mac 平台传空值即可。
-          APPLE_CERTIFICATE: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_TEAM_ID || '' }}
+          # 注意：这里**不能**写 APPLE_CERTIFICATE / APPLE_SIGNING_IDENTITY 之类的变量。
+          # tauri-bundler 用 var_os() 判断「是否提供证书」——变量存在但值为空串时返回
+          # Some("")，会被当成「给了一张证书」，拿空 base64 去 security import 直接失败：
+          #   failed to bundle project: error running bundle_dmg.sh / 导入证书失败
+          # 未配置 Apple 证书时让变量保持「未定义」，mac 走 ad-hoc 签名即可。
+          # 等真正买了 Apple Developer 再按下面的方式补（且必须用 secrets 判空，不能给空串）：
+          #   APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD / APPLE_SIGNING_IDENTITY
+          #   APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
         with:
           # 不在这里创建 Release：各平台并行上传会互相覆盖 latest.json，
           # 统一由下面的 manifest job 生成
@@ -94,31 +94,14 @@ jobs:
             src-tauri/target/*/release/bundle/macos/*.sig
           if-no-files-found: ignore
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          # 直接发布（非草稿）：tag 推上来即对客户端生效
-          # releases/latest/download/latest.json 只解析已发布的 release，草稿会 404
-          draft: false
-          name: PMP 工时 ${{ github.ref_name }}
-          body: 各平台安装包见下方 Assets。应用内「检查更新」会拉取 latest.json 自动升级。
-          files: artifacts/*
-
   # 汇总更新清单：三个平台的 signature + 下载地址合成一份 latest.json
+  #
+  # Release 本身由 tauri-action 在构建阶段创建并上传各平台产物（含 .sig），
+  # 这里不再重复创建 —— 之前用 softprops 再建一次会撞 already_exists 直接失败。
+  # 本 job 只做两件事：补 Release 标题/说明，以及上传 latest.json。
   manifest:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: release
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +123,16 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+
+          # tauri-action 一般已经建好 Release 并上传了各平台产物（含 .sig）。
+          # 万一它没建（例如手动重跑本 job），这里兜底创建，避免后续 gh api 404。
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "PMP 工时 $TAG" --notes "各平台安装包见下方 Assets。"
+          fi
+          # 统一标题与说明（无论 Release 是谁建的都覆盖一次）
+          gh release edit "$TAG" --title "PMP 工时 $TAG" \
+            --notes "各平台安装包见下方 Assets。应用内「检查更新」会拉取 latest.json 自动升级。"
+
           python3 - <<'PY'
           import datetime
           import json
