@@ -108,8 +108,10 @@ jobs:
       - name: 下载各平台构建产物
         uses: actions/download-artifact@v4
         with:
+          # 每个平台的产物落在 dist/<artifact名>/ 下，保留平台信息：
+          # macOS 两个架构的更新包同名，必须在各自的目录里才能区分
           path: dist
-          merge-multiple: true
+          pattern: pmp-timesheet-*
 
       - name: 校验版本号一致
         run: |
@@ -121,6 +123,40 @@ jobs:
             echo "::error::版本号不一致 —— tag=$TAG tauri.conf=$CONF package.json=$PKG，请先统一版本号再打标签"
             exit 1
           fi
+
+      - name: 按架构重命名 macOS 更新包
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          root = pathlib.Path("dist")
+          ver = json.load(open("src-tauri/tauri.conf.json", encoding="utf-8"))["version"]
+
+          # tauri 生成的 macOS 更新包固定叫 "<产品名>.app.tar.gz"，不带版本与架构。
+          # 两个架构同名 -> 会上传时互相覆盖，latest.json 也没法区分，必须改名。
+          arch_of = {"pmp-timesheet-macos-arm64": "aarch64", "pmp-timesheet-macos-intel": "x64"}
+          for folder, arch in arch_of.items():
+              base = root / folder
+              if not base.is_dir():
+                  continue
+              for f in sorted(base.rglob("*")):
+                  if not f.is_file() or not f.name.endswith(".app.tar.gz"):
+                      continue
+                  target = f.with_name(f"PMP-Timesheet_{ver}_{arch}.app.tar.gz")
+                  if f != target:
+                      f.rename(target)
+                      print(f"rename {f.name} -> {target.name}")
+                  sig = f.with_name(f.name + ".sig")
+                  if sig.exists():
+                      sig.rename(f.with_name(target.name + ".sig"))
+                      print(f"rename {sig.name} -> {target.name}.sig")
+
+          for f in sorted(root.rglob("*")):
+              if f.is_file():
+                  print(" ", f.relative_to(root))
+          PY
 
       - name: 创建 Release 并上传产物
         env:
@@ -134,13 +170,34 @@ jobs:
           else
             gh release create "$TAG" --title "PMP 工时 $TAG" --notes "$NOTES"
           fi
-          # 只上传安装包与签名文件，别把 Actions 产物里的杂物带上去
-          mapfile -d '' FILES < <(find dist -type f \( \
+          # 逐个上传：单文件失败不中断其余文件，且能明确指出是哪个文件出问题
+          fail=0
+          while IFS= read -r -d '' f; do
+            name=$(basename "$f")
+            echo "→ $name"
+            if ! gh release upload "$TAG" "$f" --clobber; then
+              echo "::error::上传失败：$name"
+              fail=1
+            fi
+          done < <(find dist -type f \( \
             -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name '*.deb' \
             -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.tar.gz' -o -name '*.sig' \) -print0)
-          printf '待上传 %d 个文件\n' "${#FILES[@]}"
-          printf '  %s\n' "${FILES[@]##*/}"
-          gh release upload "$TAG" "${FILES[@]}" --clobber
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+
+          # 清理本轮不该存在的旧资产（例如上一轮同名覆盖残留的 PMP.Timesheet.app.tar.gz）
+          find dist -type f -printf '%f\n' | sed 's/ /./g' | sort -u > expected.txt
+          gh release view "$TAG" --json assets -q '.assets[].name' > actual.txt
+          while IFS= read -r name; do
+            if [ -z "$name" ]; then
+              continue
+            fi
+            if ! grep -Fxq "$name" expected.txt; then
+              echo "清理旧资产：$name"
+              gh release delete-asset "$TAG" "$name" --yes
+            fi
+          done < actual.txt
 
       - name: 生成 latest.json 并上传
         env:
@@ -178,8 +235,9 @@ jobs:
           # 资产名 → 平台 key（客户端按编译时的 target 匹配对应条目）
           matchers = {
               "windows-x86_64": lambda n: n.endswith("-setup.exe"),
-              "darwin-aarch64": lambda n: n.endswith("aarch64.app.tar.gz"),
-              "darwin-x86_64": lambda n: n.endswith("x64.app.tar.gz") and "aarch64" not in n,
+              # macOS 更新包已在「按架构重命名」步骤改成 ..._aarch64.app.tar.gz / ..._x64.app.tar.gz
+              "darwin-aarch64": lambda n: n.endswith("_aarch64.app.tar.gz"),
+              "darwin-x86_64": lambda n: n.endswith("_x64.app.tar.gz"),
           }
 
           platforms = {}
